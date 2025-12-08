@@ -35,6 +35,11 @@ local.properties
 !debug.keystore
 .kotlin/
 
+# Environment files
+.env
+.env.production
+.env.staging
+
 # node.js
 #
 node_modules/
