@@ -10,11 +10,12 @@ import {
   RefreshControl
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { packagesAPI } from '../../services/api';
+import { packagesAPI, singlesAPI } from '../../services/api';
 
 const DailyMenuScreen = ({ navigation }) => {
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [weeklyPackages, setWeeklyPackages] = useState({});
+  const [singleMeals, setSingleMeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -28,39 +29,39 @@ const DailyMenuScreen = ({ navigation }) => {
     { id: 7, name: 'Sunday', short: 'Sun' },
   ];
 
-  const mealTypes = [
-    { id: 'breakfast', label: 'Breakfast', icon: 'sunny-outline', color: '#FFB800' },
-    { id: 'lunch', label: 'Lunch', icon: 'restaurant-outline', color: '#FF6347' },
-    { id: 'dinner', label: 'Dinner', icon: 'moon-outline', color: '#9B59B6' },
-  ];
-
   const currentDayIndex = new Date().getDay();
   const currentDay = weekDays[currentDayIndex === 0 ? 6 : currentDayIndex - 1].name;
 
   useEffect(() => {
-    fetchWeeklyPackages();
+    fetchMenuData();
     setSelectedDay(currentDay);
   }, []);
 
-  const fetchWeeklyPackages = async () => {
+  const fetchMenuData = async () => {
     try {
       setLoading(true);
-      const response = await packagesAPI.getAll();
 
-      if (response.success) {
+      // Fetch Packages
+      const packagesRes = await packagesAPI.getAll();
+      if (packagesRes.success) {
         const grouped = {};
         weekDays.forEach(day => { grouped[day.name] = []; });
 
-        (response.data.packages || []).forEach(pkg => {
+        (packagesRes.data.packages || []).forEach(pkg => {
           if (grouped[pkg.day]) {
             grouped[pkg.day].push(pkg);
           }
         });
-
         setWeeklyPackages(grouped);
       }
+
+      // Fetch Single Meals
+      const singlesRes = await singlesAPI.getAll();
+      if (singlesRes.success) {
+        setSingleMeals(singlesRes.data.items || []);
+      }
     } catch (error) {
-      console.error('Error fetching weekly packages:', error);
+      console.error('Error fetching menu data:', error);
     } finally {
       setLoading(false);
     }
@@ -68,21 +69,134 @@ const DailyMenuScreen = ({ navigation }) => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchWeeklyPackages();
+    await fetchMenuData();
     setRefreshing(false);
   };
 
   const currentDayPackages = weeklyPackages[selectedDay] || [];
 
   const getMealTypeInfo = (mealType) => {
-    return mealTypes.find(m => m.id === mealType) || mealTypes[1];
+    const types = {
+      breakfast: { icon: 'sunny-outline', color: '#FFB800', label: 'Breakfast', order: 1 },
+      lunch: { icon: 'restaurant-outline', color: '#FF6347', label: 'Lunch', order: 2 },
+      dinner: { icon: 'moon-outline', color: '#9B59B6', label: 'Dinner', order: 3 }
+    };
+    return types[mealType] || types.lunch;
   };
 
   const getItemName = (item) => typeof item === 'string' ? item : item?.name || 'Item';
   const getItemImage = (item) => typeof item === 'string' ? 'https://via.placeholder.com/150' : (item?.image || 'https://via.placeholder.com/150');
 
-  const getPackagesByMealType = (mealType) => {
-    return currentDayPackages.filter(pkg => pkg.mealType === mealType);
+  // Group packages by meal type in correct order
+  const getGroupedPackages = () => {
+    const groups = {
+      breakfast: [],
+      lunch: [],
+      dinner: []
+    };
+
+    currentDayPackages.forEach(pkg => {
+      if (groups[pkg.mealType]) {
+        groups[pkg.mealType].push(pkg);
+      }
+    });
+
+    return groups;
+  };
+
+  const renderPackageCard = (pkg) => {
+    const mealInfo = getMealTypeInfo(pkg.mealType);
+
+    return (
+      <TouchableOpacity
+        key={pkg.id}
+        style={styles.packageCard}
+        onPress={() => navigation.navigate('Booking', { item: pkg, day: selectedDay, type: 'package' })}
+        activeOpacity={0.8}
+      >
+        <Image source={{ uri: pkg.image || 'https://via.placeholder.com/300' }} style={styles.packageImage} />
+
+        <View style={[styles.mealBadge, { backgroundColor: mealInfo.color }]}>
+          <Icon name={mealInfo.icon} size={12} color="#FFFFFF" />
+          <Text style={styles.mealBadgeText}>{mealInfo.label}</Text>
+        </View>
+
+        <View style={styles.packageInfo}>
+          <View style={styles.packageHeader}>
+            <View style={styles.packageTitleContainer}>
+              <Text style={styles.packageName} numberOfLines={1}>{pkg.name}</Text>
+              <Text style={styles.packageDesc} numberOfLines={1}>{pkg.description || 'Delicious meal package'}</Text>
+            </View>
+            <View style={styles.priceSection}>
+              <Text style={styles.priceLabel}>Price</Text>
+              <Text style={styles.packagePrice}>₹{pkg.price}</Text>
+            </View>
+          </View>
+
+          {/* Items Preview */}
+          {pkg.items && pkg.items.length > 0 && (
+            <View style={styles.itemsPreview}>
+              {pkg.items.slice(0, 3).map((item, idx) => (
+                <View key={idx} style={styles.itemChip}>
+                  <Image source={{ uri: getItemImage(item) }} style={styles.itemChipImage} />
+                  <Text style={styles.itemChipText} numberOfLines={1}>{getItemName(item)}</Text>
+                </View>
+              ))}
+              {pkg.items.length > 3 && (
+                <View style={styles.moreChip}>
+                  <Text style={styles.moreChipText}>+{pkg.items.length - 3}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          <View style={styles.cardFooter}>
+            <View style={styles.itemCountBadge}>
+              <Icon name="layers-outline" size={14} color="#2D7A4F" />
+              <Text style={styles.itemCountText}>{pkg.items?.length || 0} items</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.orderButton}
+              onPress={() => navigation.navigate('Booking', { item: pkg, day: selectedDay, type: 'package' })}
+            >
+              <Text style={styles.orderButtonText}>Order</Text>
+              <Icon name="arrow-forward" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSingleCard = (item) => {
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.singleCard}
+        onPress={() => navigation.navigate('Booking', { item, type: 'single' })}
+        activeOpacity={0.7}
+      >
+        <Image
+          source={{ uri: item.image || 'https://via.placeholder.com/200' }}
+          style={styles.singleImage}
+        />
+        <View style={styles.singleContent}>
+          {item.category && (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{item.category}</Text>
+            </View>
+          )}
+          <Text style={styles.singleName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.singleDesc} numberOfLines={2}>{item.description}</Text>
+          <View style={styles.singleFooter}>
+            <Text style={styles.singlePrice}>₹{item.price}</Text>
+            <TouchableOpacity style={styles.addButton}>
+              <Icon name="add" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   const renderDayButton = (day) => {
@@ -128,82 +242,7 @@ const DailyMenuScreen = ({ navigation }) => {
     );
   };
 
-  const renderPackageCard = (pkg) => {
-    const mealInfo = getMealTypeInfo(pkg.mealType);
-
-    return (
-      <TouchableOpacity
-        key={pkg.id}
-        style={styles.packageCard}
-        onPress={() => navigation.navigate('Booking', { item: pkg, day: selectedDay, type: 'package' })}
-        activeOpacity={0.8}
-      >
-        <Image source={{ uri: pkg.image || 'https://via.placeholder.com/300' }} style={styles.packageImage} />
-
-        <View style={styles.packageInfo}>
-          <View style={styles.packageHeader}>
-            <View style={styles.packageTitleContainer}>
-              <Text style={styles.packageName} numberOfLines={1}>{pkg.name}</Text>
-              <Text style={styles.packageDesc} numberOfLines={1}>{pkg.description || 'Delicious meal package'}</Text>
-            </View>
-            <Text style={styles.packagePrice}>₹{pkg.price}</Text>
-          </View>
-
-          {/* Items Preview */}
-          {pkg.items && pkg.items.length > 0 && (
-            <View style={styles.itemsPreview}>
-              {pkg.items.slice(0, 3).map((item, idx) => (
-                <View key={idx} style={styles.itemChip}>
-                  <Image source={{ uri: getItemImage(item) }} style={styles.itemChipImage} />
-                  <Text style={styles.itemChipText} numberOfLines={1}>{getItemName(item)}</Text>
-                </View>
-              ))}
-              {pkg.items.length > 3 && (
-                <View style={styles.moreChip}>
-                  <Text style={styles.moreChipText}>+{pkg.items.length - 3}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.orderButton}
-            onPress={() => navigation.navigate('Booking', { item: pkg, day: selectedDay, type: 'package' })}
-          >
-            <Text style={styles.orderButtonText}>Order Now</Text>
-            <Icon name="arrow-forward" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderMealSection = (mealType) => {
-    const packages = getPackagesByMealType(mealType);
-    const mealInfo = getMealTypeInfo(mealType);
-
-    if (packages.length === 0) return null;
-
-    return (
-      <View key={mealType} style={styles.mealSection}>
-        <View style={styles.mealHeader}>
-          <View style={[styles.mealIconBg, { backgroundColor: mealInfo.color }]}>
-            <Icon name={mealInfo.icon} size={22} color="#FFFFFF" />
-          </View>
-          <View style={styles.mealTitleContainer}>
-            <Text style={styles.mealTitle}>{mealInfo.label}</Text>
-            <Text style={styles.mealCount}>
-              {packages.length} package{packages.length > 1 ? 's' : ''} available
-            </Text>
-          </View>
-        </View>
-
-        {packages.map(pkg => renderPackageCard(pkg))}
-      </View>
-    );
-  };
-
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#2D7A4F" />
@@ -212,7 +251,8 @@ const DailyMenuScreen = ({ navigation }) => {
     );
   }
 
-  const hasPackages = currentDayPackages.length > 0;
+  const groupedPackages = getGroupedPackages();
+  const totalDailyItems = currentDayPackages.length + singleMeals.length;
 
   return (
     <View style={styles.container}>
@@ -258,33 +298,103 @@ const DailyMenuScreen = ({ navigation }) => {
       >
         {/* Selected Day Info */}
         <View style={styles.dayInfoBanner}>
-          <Icon name="calendar" size={20} color="#2D7A4F" />
-          <Text style={styles.dayInfoText}>
-            {selectedDay} • {currentDayPackages.length} package{currentDayPackages.length !== 1 ? 's' : ''}
-          </Text>
-          {selectedDay === currentDay && (
-            <View style={styles.todayBadge}>
-              <Text style={styles.todayBadgeText}>Today</Text>
-            </View>
-          )}
+          <View style={styles.dayInfoLeft}>
+            <Icon name="calendar" size={20} color="#2D7A4F" />
+            <Text style={styles.dayInfoText}>
+              {selectedDay}'s Menu
+            </Text>
+          </View>
+          <Text style={styles.dayInfoCount}>{totalDailyItems} items</Text>
         </View>
 
         {/* Meal Sections */}
-        {hasPackages ? (
-          <View style={styles.sectionsContainer}>
-            {renderMealSection('breakfast')}
-            {renderMealSection('lunch')}
-            {renderMealSection('dinner')}
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <Text style={styles.emptyTitle}>No packages for {selectedDay}</Text>
-            <Text style={styles.emptyText}>
-              Package meals will be added soon. Check other days!
-            </Text>
-          </View>
-        )}
+        <View style={styles.sectionsContainer}>
+
+          {/* Breakfast Section */}
+          {groupedPackages.breakfast.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealHeader}>
+                <View style={[styles.mealIconBg, { backgroundColor: '#FFF8E1' }]}>
+                  <Icon name="sunny-outline" size={22} color="#FFB800" />
+                </View>
+                <View style={styles.mealTitleContainer}>
+                  <Text style={styles.mealTitle}>Breakfast</Text>
+                  <Text style={styles.mealCount}>
+                    {groupedPackages.breakfast.length} packages
+                  </Text>
+                </View>
+              </View>
+              {groupedPackages.breakfast.map(pkg => renderPackageCard(pkg))}
+            </View>
+          )}
+
+          {/* Lunch Section */}
+          {groupedPackages.lunch.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealHeader}>
+                <View style={[styles.mealIconBg, { backgroundColor: '#FFEBEE' }]}>
+                  <Icon name="restaurant-outline" size={22} color="#FF6347" />
+                </View>
+                <View style={styles.mealTitleContainer}>
+                  <Text style={styles.mealTitle}>Lunch</Text>
+                  <Text style={styles.mealCount}>
+                    {groupedPackages.lunch.length} packages
+                  </Text>
+                </View>
+              </View>
+              {groupedPackages.lunch.map(pkg => renderPackageCard(pkg))}
+            </View>
+          )}
+
+          {/* Dinner Section */}
+          {groupedPackages.dinner.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealHeader}>
+                <View style={[styles.mealIconBg, { backgroundColor: '#F3E5F5' }]}>
+                  <Icon name="moon-outline" size={22} color="#9B59B6" />
+                </View>
+                <View style={styles.mealTitleContainer}>
+                  <Text style={styles.mealTitle}>Dinner</Text>
+                  <Text style={styles.mealCount}>
+                    {groupedPackages.dinner.length} packages
+                  </Text>
+                </View>
+              </View>
+              {groupedPackages.dinner.map(pkg => renderPackageCard(pkg))}
+            </View>
+          )}
+
+          {/* Single Meals Section */}
+          {singleMeals.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealHeader}>
+                <View style={[styles.mealIconBg, { backgroundColor: '#E8F5E9' }]}>
+                  <Icon name="fast-food-outline" size={22} color="#2D7A4F" />
+                </View>
+                <View style={styles.mealTitleContainer}>
+                  <Text style={styles.mealTitle}>A La Carte</Text>
+                  <Text style={styles.mealCount}>
+                    {singleMeals.length} items
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.singlesGrid}>
+                {singleMeals.map(item => renderSingleCard(item))}
+              </View>
+            </View>
+          )}
+
+          {/* Empty State */}
+          {currentDayPackages.length === 0 && singleMeals.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📭</Text>
+              <Text style={styles.emptyTitle}>No menu for {selectedDay}</Text>
+              <Text style={styles.emptyText}>
+                Menu items will be added soon. Check other days!
+              </Text>
+            </View>
+          )}
+        </View>
 
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -428,6 +538,7 @@ const styles = StyleSheet.create({
   dayInfoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#E8F5E9',
     marginHorizontal: 20,
     padding: 14,
@@ -435,12 +546,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#C8E6C9',
   },
+  dayInfoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   dayInfoText: {
     fontSize: 14,
     color: '#2D7A4F',
     fontWeight: '600',
     marginLeft: 10,
-    flex: 1,
+  },
+  dayInfoCount: {
+    fontSize: 12,
+    color: '#2D7A4F',
+    fontWeight: '500',
   },
   todayBadge: {
     backgroundColor: '#FFB800',
@@ -524,10 +643,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#95A5A6',
   },
+  priceSection: {
+    alignItems: 'flex-end',
+  },
+  priceLabel: {
+    fontSize: 11,
+    color: '#95A5A6',
+  },
   packagePrice: {
     fontSize: 22,
     fontWeight: '700',
     color: '#2D7A4F',
+  },
+  mealBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    gap: 4,
+  },
+  mealBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   itemsPreview: {
     flexDirection: 'row',
@@ -566,19 +708,110 @@ const styles = StyleSheet.create({
     color: '#2D7A4F',
     fontWeight: '600',
   },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2F5',
+  },
+  itemCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  itemCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2D7A4F',
+  },
   orderButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#2D7A4F',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    gap: 6,
   },
   orderButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  singlesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  singleCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    marginBottom: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  singleImage: {
+    width: '100%',
+    height: 110,
+    backgroundColor: '#E8ECEF',
+  },
+  singleContent: {
+    padding: 12,
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#2D7A4F',
+  },
+  singleName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2C3E50',
+    marginBottom: 4,
+  },
+  singleDesc: {
+    fontSize: 11,
+    color: '#95A5A6',
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  singleFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  singlePrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2D7A4F',
+  },
+  addButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#2D7A4F',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyState: {
     alignItems: 'center',
