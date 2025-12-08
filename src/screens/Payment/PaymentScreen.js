@@ -1,17 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { AuthContext } from '../../context/AuthContext';
+import { ordersAPI } from '../../services/api';
 
 const PaymentScreen = ({ route, navigation }) => {
   const { orderData } = route.params;
+  const { user } = useContext(AuthContext);
   const [selectedMethod, setSelectedMethod] = useState('upi');
+  const [loading, setLoading] = useState(false);
 
   const paymentMethods = [
     {
@@ -45,32 +50,75 @@ const PaymentScreen = ({ route, navigation }) => {
   ];
 
   const handlePayment = async () => {
-    // Simulate payment processing
-    Alert.alert(
-      'Processing Payment',
-      'Please wait...',
-      [],
-      { cancelable: false }
-    );
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to place an order');
+      return;
+    }
 
-    // Simulate API call
-    setTimeout(() => {
-      const orderId = `ORD${Date.now()}`;
+    setLoading(true);
 
-      Alert.alert(
-        '🎉 Success!',
-        'Your order has been placed successfully!',
-        [
+    try {
+      // 1. Construct payload fitting backend schema
+      // Backend expects: items (array), customer (obj), totalAmount, paymentMethod, etc.
+      const payload = {
+        items: [
           {
-            text: 'View Order',
-            onPress: () => navigation.navigate('BookingConfirm', {
-              orderId,
-              orderData: { ...orderData, orderId }
-            })
+            id: orderData.item.id,
+            name: orderData.item.name,
+            quantity: orderData.quantity,
+            price: orderData.item.price,
+            image: orderData.item.image,
+            // Include package items shorthand if it's a package
+            packageItems: orderData.item.items || [],
+            day: orderData.day,
+            mealType: orderData.item.mealType
           }
-        ]
-      );
-    }, 2000);
+        ],
+        customer: {
+          name: user.name,
+          phone: user.phone,
+          email: user.email || '',
+          address: orderData.deliveryAddress
+        },
+        totalAmount: orderData.totalAmount,
+        paymentMethod: paymentMethods.find(m => m.id === selectedMethod)?.name || 'Cash',
+        notes: orderData.specialInstructions || '',
+        deliveryInfo: {
+          date: orderData.displayDate,
+          time: orderData.displayTime,
+          isToday: orderData.isToday
+        }
+      };
+
+      // 2. Call Create Order API
+      console.log('📦 Creating Order:', JSON.stringify(payload, null, 2));
+      const response = await ordersAPI.create(payload);
+
+      if (response.success) {
+        // 3. Success -> Navigate to Confirmation
+        navigation.reset({
+          index: 0,
+          routes: [
+            { name: 'Home' },
+            {
+              name: 'BookingConfirm',
+              params: {
+                orderId: response.data.id,
+                orderData: { ...orderData, orderId: response.data.id, totalAmount: payload.totalAmount }
+              }
+            }
+          ],
+        });
+      } else {
+        throw new Error(response.message || 'Failed to place order');
+      }
+
+    } catch (error) {
+      console.error('Order creation error:', error);
+      Alert.alert('Order Failed', error.message || 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -200,11 +248,18 @@ const PaymentScreen = ({ route, navigation }) => {
           <Text style={styles.amountValue}>₹{orderData.totalAmount}</Text>
         </View>
         <TouchableOpacity
-          style={styles.payButton}
+          style={[styles.payButton, loading && { opacity: 0.7 }]}
           onPress={handlePayment}
+          disabled={loading}
         >
-          <Icon name="lock-closed" size={20} color="#FFFFFF" />
-          <Text style={styles.payButtonText}>Pay Now</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Icon name="lock-closed" size={20} color="#FFFFFF" />
+              <Text style={styles.payButtonText}>Pay Now</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </View>

@@ -1,75 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
+import React, { useState, useEffect, useContext } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
   TouchableOpacity,
   RefreshControl,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { AuthContext } from '../../context/AuthContext';
+import { ordersAPI } from '../../services/api';
 
 const MyOrdersScreen = ({ navigation }) => {
+  const { user } = useContext(AuthContext);
   const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('ongoing');
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [user]);
 
-  const fetchOrders = () => {
-    // Mock data
-    const mockOrders = [
-      {
-        id: 'ORD001',
-        itemName: 'Organic Salad Bowl',
-        image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
-        quantity: 2,
-        deliveryDay: 'Today',
-        deliveryTime: '12:00 PM',
-        totalAmount: 340,
-        status: 'preparing',
-        orderDate: new Date().toISOString(),
-      },
-      {
-        id: 'ORD002',
-        itemName: 'Chicken Curry Rice',
-        image: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=400',
-        quantity: 1,
-        deliveryDay: 'Tomorrow',
-        deliveryTime: '2:00 PM',
-        totalAmount: 170,
-        status: 'confirmed',
-        orderDate: new Date().toISOString(),
-      },
-      {
-        id: 'ORD003',
-        itemName: 'Veg Buddha Bowl',
-        image: 'https://images.unsplash.com/photo-1546793665-c74683f339c1?w=400',
-        quantity: 1,
-        deliveryDay: 'Yesterday',
-        deliveryTime: '1:00 PM',
-        totalAmount: 170,
-        status: 'delivered',
-        orderDate: new Date(Date.now() - 86400000).toISOString(),
-      },
-      {
-        id: 'ORD004',
-        itemName: 'Dal Rice Combo',
-        image: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400',
-        quantity: 3,
-        deliveryDay: '2 days ago',
-        deliveryTime: '7:00 PM',
-        totalAmount: 260,
-        status: 'delivered',
-        orderDate: new Date(Date.now() - 172800000).toISOString(),
-      },
-    ];
-    
-    setOrders(mockOrders);
-    setRefreshing(false);
+  const fetchOrders = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await ordersAPI.getMyOrders(user.phone);
+      if (response.success) {
+        setOrders(response.data.orders);
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   const onRefresh = () => {
@@ -80,10 +51,12 @@ const MyOrdersScreen = ({ navigation }) => {
   const getStatusInfo = (status) => {
     switch (status) {
       case 'confirmed':
+      case 'placed':
         return { color: '#2196F3', icon: 'checkmark-circle', label: 'Confirmed' };
       case 'preparing':
         return { color: '#FF9800', icon: 'restaurant', label: 'Preparing' };
       case 'out_for_delivery':
+      case 'picked_up':
         return { color: '#9C27B0', icon: 'bicycle', label: 'Out for Delivery' };
       case 'delivered':
         return { color: '#4CAF50', icon: 'checkmark-done-circle', label: 'Delivered' };
@@ -96,7 +69,7 @@ const MyOrdersScreen = ({ navigation }) => {
 
   const filteredOrders = orders.filter(order => {
     if (activeTab === 'ongoing') {
-      return ['confirmed', 'preparing', 'out_for_delivery'].includes(order.status);
+      return ['placed', 'confirmed', 'preparing', 'picked_up', 'out_for_delivery'].includes(order.status);
     } else {
       return ['delivered', 'cancelled'].includes(order.status);
     }
@@ -104,15 +77,20 @@ const MyOrdersScreen = ({ navigation }) => {
 
   const renderOrderItem = ({ item }) => {
     const statusInfo = getStatusInfo(item.status);
-    
+    // Safe access to first item
+    const firstItem = item.items && item.items[0] ? item.items[0] : { name: 'Order Item', quantity: 1 };
+
     return (
       <TouchableOpacity
         style={styles.orderCard}
         onPress={() => navigation.navigate('OrderStatus', { orderId: item.id })}
         activeOpacity={0.8}
       >
-        <Image source={{ uri: item.image }} style={styles.orderImage} />
-        
+        <Image
+          source={{ uri: firstItem.image || 'https://via.placeholder.com/100' }}
+          style={styles.orderImage}
+        />
+
         <View style={styles.orderInfo}>
           <View style={styles.orderHeader}>
             <Text style={styles.orderId}>#{item.id}</Text>
@@ -124,17 +102,21 @@ const MyOrdersScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <Text style={styles.itemName} numberOfLines={1}>{item.itemName}</Text>
-          <Text style={styles.itemQuantity}>Quantity: {item.quantity}</Text>
+          <Text style={styles.itemName} numberOfLines={1}>{firstItem.name}</Text>
+          <Text style={styles.itemQuantity}>Quantity: {firstItem.quantity}</Text>
 
           <View style={styles.orderDetails}>
             <View style={styles.detailItem}>
               <Icon name="calendar-outline" size={14} color="#95A5A6" />
-              <Text style={styles.detailText}>{item.deliveryDay}</Text>
+              <Text style={styles.detailText}>
+                {item.deliveryInfo ? item.deliveryInfo.date : 'Date'}
+              </Text>
             </View>
             <View style={styles.detailItem}>
               <Icon name="time-outline" size={14} color="#95A5A6" />
-              <Text style={styles.detailText}>{item.deliveryTime}</Text>
+              <Text style={styles.detailText}>
+                {item.deliveryInfo ? item.deliveryInfo.time : 'Time'}
+              </Text>
             </View>
           </View>
 
@@ -149,6 +131,14 @@ const MyOrdersScreen = ({ navigation }) => {
       </TouchableOpacity>
     );
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#2D7A4F" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -191,12 +181,12 @@ const MyOrdersScreen = ({ navigation }) => {
           </View>
           <Text style={styles.emptyTitle}>No Orders Yet</Text>
           <Text style={styles.emptyText}>
-            {activeTab === 'ongoing' 
+            {activeTab === 'ongoing'
               ? 'You don\'t have any ongoing orders'
               : 'Your order history is empty'
             }
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.orderNowButton}
             onPress={() => navigation.navigate('Home')}
           >
@@ -221,11 +211,11 @@ const MyOrdersScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#F5F7FA' 
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F7FA'
   },
-  header: { 
+  header: {
     backgroundColor: '#2D7A4F',
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -241,10 +231,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  headerTitle: { 
-    fontSize: 24, 
-    fontWeight: '700', 
-    color: '#FFFFFF' 
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF'
   },
   helpButton: {
     width: 40,
@@ -286,12 +276,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
   },
-  listContent: { 
-    padding: 20 
+  listContent: {
+    padding: 20
   },
-  orderCard: { 
+  orderCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF', 
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     marginBottom: 16,
     shadowColor: '#000',
@@ -310,41 +300,41 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
   },
-  orderHeader: { 
-    flexDirection: 'row', 
+  orderHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  orderId: { 
-    fontSize: 13, 
-    fontWeight: '700', 
+  orderId: {
+    fontSize: 13,
+    fontWeight: '700',
     color: '#2C3E50',
   },
-  statusBadge: { 
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10, 
-    paddingVertical: 4, 
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
   },
-  statusText: { 
-    fontSize: 11, 
+  statusText: {
+    fontSize: 11,
     fontWeight: '700',
     marginLeft: 4,
   },
-  itemName: { 
-    fontSize: 16, 
-    fontWeight: '700', 
+  itemName: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#2C3E50',
     marginBottom: 4,
   },
-  itemQuantity: { 
-    fontSize: 13, 
+  itemQuantity: {
+    fontSize: 13,
     color: '#95A5A6',
     marginBottom: 8,
   },
-  orderDetails: { 
+  orderDetails: {
     flexDirection: 'row',
     marginBottom: 12,
   },
@@ -353,37 +343,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
-  detailText: { 
-    fontSize: 12, 
+  detailText: {
+    fontSize: 12,
     color: '#7F8C8D',
     marginLeft: 4,
   },
-  orderFooter: { 
-    flexDirection: 'row', 
+  orderFooter: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#E8ECEF',
   },
-  totalAmount: { 
-    fontSize: 20, 
-    fontWeight: '700', 
-    color: '#2D7A4F' 
+  totalAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2D7A4F'
   },
   viewButton: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  viewButtonText: { 
-    fontSize: 14, 
-    color: '#2D7A4F', 
+  viewButtonText: {
+    fontSize: 14,
+    color: '#2D7A4F',
     fontWeight: '600',
     marginRight: 4,
   },
-  emptyContainer: { 
-    flex: 1, 
-    justifyContent: 'center', 
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
   },
@@ -396,23 +386,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  emptyTitle: { 
-    fontSize: 22, 
-    fontWeight: '700', 
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
     color: '#2C3E50',
     marginBottom: 8,
   },
-  emptyText: { 
-    fontSize: 15, 
+  emptyText: {
+    fontSize: 15,
     color: '#95A5A6',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 22,
   },
-  orderNowButton: { 
+  orderNowButton: {
     flexDirection: 'row',
-    backgroundColor: '#2D7A4F', 
-    paddingHorizontal: 32, 
+    backgroundColor: '#2D7A4F',
+    paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -422,12 +412,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
-  orderNowText: { 
-    color: '#FFFFFF', 
-    fontSize: 16, 
+  orderNowText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '700',
     marginLeft: 8,
   },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });
 
 export default MyOrdersScreen;

@@ -1,92 +1,141 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Linking,
-  Image
+  Image,
+  RefreshControl,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { ordersAPI } from '../../services/api';
 
 const OrderStatusScreen = ({ route, navigation }) => {
   const { orderId } = route.params;
-  const [orderStatus, setOrderStatus] = useState('preparing');
+  const [orderData, setOrderData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock order data
-  const orderData = {
-    id: orderId,
-    itemName: 'Organic Salad Bowl',
-    image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
-    quantity: 2,
-    totalAmount: 340,
-    deliveryDay: 'Today',
-    deliveryTime: '12:00 PM',
-    address: '123 Main Street, Apartment 4B, New Delhi - 110001',
-    rider: {
-      name: 'Rajesh Kumar',
-      phone: '+91 9876543210',
-      vehicle: 'Honda Activa'
+  useEffect(() => {
+    fetchOrderDetails();
+  }, [orderId]);
+
+  const fetchOrderDetails = async () => {
+    try {
+      const response = await ordersAPI.getById(orderId);
+      if (response.success) {
+        setOrderData(response.data);
+      } else {
+        Alert.alert('Error', 'Failed to fetch order details');
+      }
+    } catch (error) {
+      console.error('Error fetching order details:', error);
+      Alert.alert('Error', 'Something went wrong');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const statusSteps = [
-    { 
-      key: 'confirmed', 
-      label: 'Order Confirmed', 
-      icon: 'checkmark-circle',
-      description: 'Your order has been received',
-      time: '10:30 AM'
-    },
-    { 
-      key: 'preparing', 
-      label: 'Preparing Food', 
-      icon: 'restaurant',
-      description: 'Our chef is preparing your meal',
-      time: '10:45 AM'
-    },
-    { 
-      key: 'ready', 
-      label: 'Ready for Pickup', 
-      icon: 'cube',
-      description: 'Food is packed and ready',
-      time: '11:15 AM'
-    },
-    { 
-      key: 'picked_up', 
-      label: 'Out for Delivery', 
-      icon: 'bicycle',
-      description: 'Rider is on the way',
-      time: '11:30 AM'
-    },
-    { 
-      key: 'delivered', 
-      label: 'Delivered', 
-      icon: 'checkmark-done-circle',
-      description: 'Enjoy your meal!',
-      time: '12:00 PM'
-    }
-  ];
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchOrderDetails();
+  }, []);
 
-  const getCurrentStepIndex = () => {
-    return statusSteps.findIndex(step => step.key === orderStatus);
+  const getStatusStepIndex = (status) => {
+    const steps = ['placed', 'confirmed', 'preparing', 'ready', 'picked_up', 'out_for_delivery', 'delivered'];
+    return steps.indexOf(status);
   };
 
   const handleCallRider = () => {
-    Linking.openURL(`tel:${orderData.rider.phone}`);
+    if (orderData?.rider?.phone) {
+      Linking.openURL(`tel:${orderData.rider.phone}`);
+    }
   };
 
   const handleTrackOnMap = () => {
-    const address = encodeURIComponent(orderData.address);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`);
+    if (orderData?.customer?.address) {
+      const address = encodeURIComponent(orderData.customer.address);
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`);
+    }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#2D7A4F" />
+      </View>
+    );
+  }
+
+  if (!orderData) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text style={styles.errorText}>Order not found</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchOrderDetails}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const statusSteps = [
+    {
+      key: 'placed',
+      label: 'Order Placed',
+      icon: 'receipt',
+      description: 'Your order has been received',
+      time: orderData.createdAt ? new Date(orderData.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+    },
+    {
+      key: 'confirmed',
+      label: 'Order Confirmed',
+      icon: 'checkmark-circle',
+      description: 'Your order has been confirmed',
+      time: ''
+    },
+    {
+      key: 'preparing',
+      label: 'Preparing Food',
+      icon: 'restaurant',
+      description: 'Our chef is preparing your meal',
+      time: ''
+    },
+    {
+      key: 'ready',
+      label: 'Ready for Pickup',
+      icon: 'cube',
+      description: 'Food is packed and ready',
+      time: ''
+    },
+    {
+      key: 'picked_up',
+      label: 'Out for Delivery',
+      icon: 'bicycle',
+      description: 'Rider is on the way',
+      time: ''
+    },
+    {
+      key: 'delivered',
+      label: 'Delivered',
+      icon: 'checkmark-done-circle',
+      description: 'Enjoy your meal!',
+      time: ''
+    }
+  ];
+
+  const currentStepIndex = getStatusStepIndex(orderData.status);
+  const item = orderData.items && orderData.items[0] ? orderData.items[0] : {};
 
   return (
     <View style={styles.container}>
       {/* Green Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
@@ -96,29 +145,39 @@ const OrderStatusScreen = ({ route, navigation }) => {
           <Text style={styles.headerTitle}>Track Order</Text>
           <Text style={styles.headerSubtitle}>#{orderId}</Text>
         </View>
-        <TouchableOpacity style={styles.refreshButton}>
+        <TouchableOpacity style={styles.refreshButton} onPress={fetchOrderDetails}>
           <Icon name="refresh" size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2D7A4F']} />
+        }
       >
         {/* Item Card */}
         <View style={styles.itemCard}>
-          <Image source={{ uri: orderData.image }} style={styles.itemImage} />
+          <Image
+            source={{ uri: item.image || 'https://via.placeholder.com/100' }}
+            style={styles.itemImage}
+          />
           <View style={styles.itemInfo}>
-            <Text style={styles.itemName}>{orderData.itemName}</Text>
-            <Text style={styles.itemQuantity}>Quantity: {orderData.quantity}</Text>
+            <Text style={styles.itemName}>{item.name || 'Order Item'}</Text>
+            <Text style={styles.itemQuantity}>Quantity: {item.quantity || 1}</Text>
             <View style={styles.itemMeta}>
               <View style={styles.metaItem}>
                 <Icon name="calendar-outline" size={14} color="#95A5A6" />
-                <Text style={styles.metaText}>{orderData.deliveryDay}</Text>
+                <Text style={styles.metaText}>
+                  {orderData.deliveryInfo?.date || 'Today'}
+                </Text>
               </View>
               <View style={styles.metaItem}>
                 <Icon name="time-outline" size={14} color="#95A5A6" />
-                <Text style={styles.metaText}>{orderData.deliveryTime}</Text>
+                <Text style={styles.metaText}>
+                  {orderData.deliveryInfo?.time || '12:00 PM'}
+                </Text>
               </View>
             </View>
             <Text style={styles.itemAmount}>₹{orderData.totalAmount}</Text>
@@ -128,12 +187,11 @@ const OrderStatusScreen = ({ route, navigation }) => {
         {/* Status Timeline */}
         <View style={styles.timelineCard}>
           <Text style={styles.timelineTitle}>Order Status</Text>
-          
+
           {statusSteps.map((step, index) => {
-            const currentIndex = getCurrentStepIndex();
-            const isActive = index <= currentIndex;
-            const isCurrent = index === currentIndex;
-            
+            const isActive = index <= currentStepIndex;
+            const isCurrent = index === currentStepIndex;
+
             return (
               <View key={step.key} style={styles.stepContainer}>
                 <View style={styles.stepLeft}>
@@ -142,10 +200,10 @@ const OrderStatusScreen = ({ route, navigation }) => {
                     isActive && styles.stepIconActive,
                     isCurrent && styles.stepIconCurrent
                   ]}>
-                    <Icon 
-                      name={step.icon} 
-                      size={20} 
-                      color={isActive ? '#FFFFFF' : '#95A5A6'} 
+                    <Icon
+                      name={step.icon}
+                      size={20}
+                      color={isActive ? '#FFFFFF' : '#95A5A6'}
                     />
                   </View>
                   {index < statusSteps.length - 1 && (
@@ -155,7 +213,7 @@ const OrderStatusScreen = ({ route, navigation }) => {
                     ]} />
                   )}
                 </View>
-                
+
                 <View style={styles.stepRight}>
                   <View style={styles.stepHeader}>
                     <Text style={[
@@ -164,7 +222,7 @@ const OrderStatusScreen = ({ route, navigation }) => {
                     ]}>
                       {step.label}
                     </Text>
-                    {isActive && (
+                    {isActive && step.time && (
                       <Text style={styles.stepTime}>{step.time}</Text>
                     )}
                   </View>
@@ -175,8 +233,8 @@ const OrderStatusScreen = ({ route, navigation }) => {
           })}
         </View>
 
-        {/* Rider Details */}
-        {orderStatus === 'picked_up' && (
+        {/* Rider Details - Only show if rider assigned */}
+        {orderData.rider && (
           <View style={styles.riderCard}>
             <View style={styles.riderHeader}>
               <View style={styles.riderAvatar}>
@@ -190,7 +248,7 @@ const OrderStatusScreen = ({ route, navigation }) => {
             </View>
 
             <View style={styles.riderActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.callButton}
                 onPress={handleCallRider}
               >
@@ -198,7 +256,7 @@ const OrderStatusScreen = ({ route, navigation }) => {
                 <Text style={styles.callButtonText}>Call</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.trackButton}
                 onPress={handleTrackOnMap}
               >
@@ -215,8 +273,8 @@ const OrderStatusScreen = ({ route, navigation }) => {
             <Icon name="location" size={24} color="#2D7A4F" />
             <Text style={styles.addressTitle}>Delivery Address</Text>
           </View>
-          <Text style={styles.addressText}>{orderData.address}</Text>
-          <TouchableOpacity 
+          <Text style={styles.addressText}>{orderData.customer?.address}</Text>
+          <TouchableOpacity
             style={styles.mapButton}
             onPress={handleTrackOnMap}
           >
@@ -226,7 +284,7 @@ const OrderStatusScreen = ({ route, navigation }) => {
         </View>
 
         {/* Delivered State */}
-        {orderStatus === 'delivered' && (
+        {orderData.status === 'delivered' && (
           <View style={styles.deliveredCard}>
             <Icon name="checkmark-done-circle" size={60} color="#4CAF50" />
             <Text style={styles.deliveredTitle}>Order Delivered!</Text>
@@ -415,6 +473,7 @@ const styles = StyleSheet.create({
   stepLabelActive: {
     color: '#2C3E50',
     fontWeight: '700',
+    time: ''
   },
   stepTime: {
     fontSize: 12,
@@ -591,6 +650,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 8,
   },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#E74C3C',
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#2D7A4F',
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  }
 });
 
 export default OrderStatusScreen;
