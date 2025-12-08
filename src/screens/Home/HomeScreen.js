@@ -14,13 +14,14 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../../context/AuthContext';
-import { packagesAPI } from '../../services/api';
+import { packagesAPI, singlesAPI } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);
   const [packageMeals, setPackageMeals] = useState([]);
+  const [singleMeals, setSingleMeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,15 +50,23 @@ const HomeScreen = ({ navigation }) => {
   ];
 
   useEffect(() => {
-    fetchTodayMenu();
+    fetchMenuData();
   }, []);
 
-  const fetchTodayMenu = async () => {
+  const fetchMenuData = async () => {
     try {
       setLoading(true);
+
+      // Fetch packages for today
       const packagesRes = await packagesAPI.getByDay(today);
       if (packagesRes.success) {
         setPackageMeals(packagesRes.data.packages || []);
+      }
+
+      // Fetch single meals
+      const singlesRes = await singlesAPI.getAll();
+      if (singlesRes.success) {
+        setSingleMeals(singlesRes.data.items || []);
       }
     } catch (error) {
       console.error('Error fetching menu:', error);
@@ -68,7 +77,7 @@ const HomeScreen = ({ navigation }) => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchTodayMenu();
+    await fetchMenuData();
     setRefreshing(false);
   };
 
@@ -89,9 +98,7 @@ const HomeScreen = ({ navigation }) => {
 
     if (selectedFilters.length > 0) {
       items = items.filter(item => {
-        // Check meal type
         if (selectedFilters.includes(item.mealType)) return true;
-        // Check if any item name matches filter
         const itemNames = (item.items || []).map(i =>
           (typeof i === 'string' ? i : i?.name || '').toLowerCase()
         );
@@ -116,17 +123,60 @@ const HomeScreen = ({ navigation }) => {
     return items;
   };
 
+  const getFilteredSingles = () => {
+    let items = singleMeals;
+
+    if (selectedFilters.length > 0) {
+      items = items.filter(item => {
+        const itemName = item.name.toLowerCase();
+        const category = (item.category || '').toLowerCase();
+        return selectedFilters.some(filter =>
+          itemName.includes(filter) || category.includes(filter)
+        );
+      });
+    }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      items = items.filter(item =>
+        item.name.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query) ||
+        item.category?.toLowerCase().includes(query)
+      );
+    }
+
+    return items;
+  };
+
   const getMealTypeInfo = (mealType) => {
     const types = {
-      breakfast: { icon: 'sunny-outline', color: '#FFB800', label: 'Breakfast' },
-      lunch: { icon: 'restaurant-outline', color: '#FF6347', label: 'Lunch' },
-      dinner: { icon: 'moon-outline', color: '#9B59B6', label: 'Dinner' }
+      breakfast: { icon: 'sunny-outline', color: '#FFB800', label: 'Breakfast', order: 1 },
+      lunch: { icon: 'restaurant-outline', color: '#FF6347', label: 'Lunch', order: 2 },
+      dinner: { icon: 'moon-outline', color: '#9B59B6', label: 'Dinner', order: 3 }
     };
     return types[mealType] || types.lunch;
   };
 
   const getItemName = (item) => typeof item === 'string' ? item : item?.name || 'Item';
   const getItemImage = (item) => typeof item === 'string' ? 'https://via.placeholder.com/150' : (item?.image || 'https://via.placeholder.com/150');
+
+  // Group packages by meal type in correct order
+  const getGroupedPackages = () => {
+    const filtered = getFilteredPackages();
+    const groups = {
+      breakfast: [],
+      lunch: [],
+      dinner: []
+    };
+
+    filtered.forEach(pkg => {
+      if (groups[pkg.mealType]) {
+        groups[pkg.mealType].push(pkg);
+      }
+    });
+
+    return groups;
+  };
 
   const renderPackageCard = (item) => {
     const mealInfo = getMealTypeInfo(item.mealType);
@@ -143,7 +193,6 @@ const HomeScreen = ({ navigation }) => {
           style={styles.packageImage}
         />
 
-        {/* Meal Type Badge */}
         <View style={[styles.mealBadge, { backgroundColor: mealInfo.color }]}>
           <Icon name={mealInfo.icon} size={12} color="#FFFFFF" />
           <Text style={styles.mealBadgeText}>{mealInfo.label}</Text>
@@ -163,7 +212,6 @@ const HomeScreen = ({ navigation }) => {
             </View>
           </View>
 
-          {/* Items Preview */}
           {item.items && item.items.length > 0 && (
             <View style={styles.itemsSection}>
               <ScrollView
@@ -209,6 +257,37 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  const renderSingleCard = (item) => {
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.singleCard}
+        onPress={() => navigation.navigate('Booking', { item, type: 'single' })}
+        activeOpacity={0.7}
+      >
+        <Image
+          source={{ uri: item.image || 'https://via.placeholder.com/200' }}
+          style={styles.singleImage}
+        />
+        <View style={styles.singleContent}>
+          {item.category && (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{item.category}</Text>
+            </View>
+          )}
+          <Text style={styles.singleName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.singleDesc} numberOfLines={2}>{item.description}</Text>
+          <View style={styles.singleFooter}>
+            <Text style={styles.singlePrice}>₹{item.price}</Text>
+            <TouchableOpacity style={styles.addButton}>
+              <Icon name="add" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -218,7 +297,9 @@ const HomeScreen = ({ navigation }) => {
     );
   }
 
-  const filteredPackages = getFilteredPackages();
+  const groupedPackages = getGroupedPackages();
+  const filteredSingles = getFilteredSingles();
+  const totalPackages = Object.values(groupedPackages).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
     <View style={styles.container}>
@@ -328,21 +409,78 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.todayText}>{today}'s Menu</Text>
           </View>
           <Text style={styles.packageCountText}>
-            {filteredPackages.length} {filteredPackages.length === 1 ? 'package' : 'packages'}
+            {totalPackages + filteredSingles.length} items
           </Text>
         </View>
 
-        {/* Packages List */}
+        {/* Package Sections in Order */}
         <View style={styles.packagesList}>
-          {filteredPackages.length > 0 ? (
-            filteredPackages.map(item => renderPackageCard(item))
-          ) : (
+          {/* Breakfast Section */}
+          {groupedPackages.breakfast.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealSectionHeader}>
+                <View style={[styles.mealIconContainer, { backgroundColor: '#FFF8E1' }]}>
+                  <Icon name="sunny-outline" size={22} color="#FFB800" />
+                </View>
+                <Text style={styles.mealSectionTitle}>Breakfast</Text>
+                <Text style={styles.mealCount}>{groupedPackages.breakfast.length}</Text>
+              </View>
+              {groupedPackages.breakfast.map(pkg => renderPackageCard(pkg))}
+            </View>
+          )}
+
+          {/* Lunch Section */}
+          {groupedPackages.lunch.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealSectionHeader}>
+                <View style={[styles.mealIconContainer, { backgroundColor: '#FFEBEE' }]}>
+                  <Icon name="restaurant-outline" size={22} color="#FF6347" />
+                </View>
+                <Text style={styles.mealSectionTitle}>Lunch</Text>
+                <Text style={styles.mealCount}>{groupedPackages.lunch.length}</Text>
+              </View>
+              {groupedPackages.lunch.map(pkg => renderPackageCard(pkg))}
+            </View>
+          )}
+
+          {/* Dinner Section */}
+          {groupedPackages.dinner.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealSectionHeader}>
+                <View style={[styles.mealIconContainer, { backgroundColor: '#F3E5F5' }]}>
+                  <Icon name="moon-outline" size={22} color="#9B59B6" />
+                </View>
+                <Text style={styles.mealSectionTitle}>Dinner</Text>
+                <Text style={styles.mealCount}>{groupedPackages.dinner.length}</Text>
+              </View>
+              {groupedPackages.dinner.map(pkg => renderPackageCard(pkg))}
+            </View>
+          )}
+
+          {/* Single Meals Section */}
+          {filteredSingles.length > 0 && (
+            <View style={styles.mealSection}>
+              <View style={styles.mealSectionHeader}>
+                <View style={[styles.mealIconContainer, { backgroundColor: '#E8F5E9' }]}>
+                  <Icon name="fast-food-outline" size={22} color="#2D7A4F" />
+                </View>
+                <Text style={styles.mealSectionTitle}>A La Carte</Text>
+                <Text style={styles.mealCount}>{filteredSingles.length}</Text>
+              </View>
+              <View style={styles.singlesGrid}>
+                {filteredSingles.map(item => renderSingleCard(item))}
+              </View>
+            </View>
+          )}
+
+          {/* Empty State */}
+          {totalPackages === 0 && filteredSingles.length === 0 && (
             <View style={styles.emptyState}>
               <Icon name="fast-food-outline" size={64} color="#E0E0E0" />
               <Text style={styles.emptyTitle}>
                 {searchQuery || selectedFilters.length > 0
-                  ? 'No matching packages'
-                  : 'No packages available'}
+                  ? 'No matching items'
+                  : 'No menu available'}
               </Text>
               <Text style={styles.emptyText}>
                 {searchQuery || selectedFilters.length > 0
@@ -377,7 +515,7 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Packages</Text>
+              <Text style={styles.modalTitle}>Filter Menu</Text>
               <TouchableOpacity
                 style={styles.modalCloseBtn}
                 onPress={() => setShowFilterModal(false)}
@@ -631,6 +769,33 @@ const styles = StyleSheet.create({
   packagesList: {
     paddingHorizontal: 20,
   },
+  mealSection: {
+    marginBottom: 28,
+  },
+  mealSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  mealIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mealSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2C3E50',
+    marginLeft: 12,
+    flex: 1,
+  },
+  mealCount: {
+    fontSize: 14,
+    color: '#95A5A6',
+    fontWeight: '600',
+  },
   packageCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -771,6 +936,74 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  singlesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  singleCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    marginBottom: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  singleImage: {
+    width: '100%',
+    height: 110,
+    backgroundColor: '#E8ECEF',
+  },
+  singleContent: {
+    padding: 12,
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#2D7A4F',
+  },
+  singleName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2C3E50',
+    marginBottom: 4,
+  },
+  singleDesc: {
+    fontSize: 11,
+    color: '#95A5A6',
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  singleFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  singlePrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2D7A4F',
+  },
+  addButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#2D7A4F',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -800,7 +1033,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
