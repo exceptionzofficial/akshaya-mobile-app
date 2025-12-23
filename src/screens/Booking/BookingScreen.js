@@ -10,6 +10,7 @@ import {
   Alert,
   Modal
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const BookingScreen = ({ route, navigation }) => {
@@ -127,7 +128,7 @@ const BookingScreen = ({ route, navigation }) => {
   const mealInfo = getMealTypeInfo(item.mealType);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Green Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -389,7 +390,7 @@ const BookingScreen = ({ route, navigation }) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 

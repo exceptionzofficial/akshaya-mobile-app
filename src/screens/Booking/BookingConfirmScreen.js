@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  StyleSheet,
   TouchableOpacity,
-  Animated
+  Animated,
+  ScrollView
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const BookingConfirmScreen = ({ route, navigation }) => {
@@ -22,117 +24,122 @@ const BookingConfirmScreen = ({ route, navigation }) => {
   }, []);
 
   return (
-    <View style={styles.container}>
-      {/* Success Animation */}
-      <Animated.View 
-        style={[
-          styles.successContainer,
-          { transform: [{ scale: scaleAnim }] }
-        ]}
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.successCircle}>
-          <Icon name="checkmark" size={80} color="#FFFFFF" />
-        </View>
-        <View style={styles.successRing} />
-      </Animated.View>
-
-      {/* Success Message */}
-      <Text style={styles.title}>Order Placed Successfully! 🎉</Text>
-      <Text style={styles.subtitle}>
-        Your delicious meal is on its way
-      </Text>
-
-      {/* Order Details Card */}
-      <View style={styles.detailsCard}>
-        <View style={styles.orderIdContainer}>
-          <Text style={styles.orderIdLabel}>Order ID</Text>
-          <Text style={styles.orderId}>#{orderId}</Text>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.detailRow}>
-          <View style={styles.detailIcon}>
-            <Icon name="fast-food-outline" size={20} color="#2D7A4F" />
+        {/* Success Animation */}
+        <Animated.View
+          style={[
+            styles.successContainer,
+            { transform: [{ scale: scaleAnim }] }
+          ]}
+        >
+          <View style={styles.successCircle}>
+            <Icon name="checkmark" size={80} color="#FFFFFF" />
           </View>
-          <View style={styles.detailInfo}>
-            <Text style={styles.detailLabel}>Item</Text>
-            <Text style={styles.detailValue}>
-              {orderData?.item?.name || 'Your meal'} x {orderData?.quantity || 1}
-            </Text>
-          </View>
-        </View>
+          <View style={styles.successRing} />
+        </Animated.View>
 
-        <View style={styles.detailRow}>
-          <View style={styles.detailIcon}>
-            <Icon name="calendar-outline" size={20} color="#2D7A4F" />
-          </View>
-          <View style={styles.detailInfo}>
-            <Text style={styles.detailLabel}>Delivery Date</Text>
-            <Text style={styles.detailValue}>{orderData?.day || 'Today'}</Text>
-          </View>
-        </View>
-
-        <View style={styles.detailRow}>
-          <View style={styles.detailIcon}>
-            <Icon name="time-outline" size={20} color="#2D7A4F" />
-          </View>
-          <View style={styles.detailInfo}>
-            <Text style={styles.detailLabel}>Delivery Time</Text>
-            <Text style={styles.detailValue}>{orderData?.selectedTime || '12:00 PM'}</Text>
-          </View>
-        </View>
-
-        <View style={styles.detailRow}>
-          <View style={styles.detailIcon}>
-            <Icon name="location-outline" size={20} color="#2D7A4F" />
-          </View>
-          <View style={styles.detailInfo}>
-            <Text style={styles.detailLabel}>Delivery Address</Text>
-            <Text style={styles.detailValue} numberOfLines={2}>
-              {orderData?.deliveryAddress || 'Your address'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.amountRow}>
-          <Text style={styles.amountLabel}>Total Amount Paid</Text>
-          <Text style={styles.amountValue}>₹{orderData?.totalAmount || 0}</Text>
-        </View>
-      </View>
-
-      {/* Info Banner */}
-      <View style={styles.infoBanner}>
-        <Icon name="information-circle" size={20} color="#2D7A4F" />
-        <Text style={styles.infoText}>
-          You'll receive a notification when your order is ready for delivery
+        {/* Success Message */}
+        <Text style={styles.title}>Order Placed Successfully! 🎉</Text>
+        <Text style={styles.subtitle}>
+          Your delicious meal is on its way
         </Text>
-      </View>
 
-      {/* Action Buttons */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity 
-          style={styles.trackButton}
-          onPress={() => navigation.navigate('Orders', {
-            screen: 'OrderStatus',
-            params: { orderId }
-          })}
-        >
-          <Icon name="navigate" size={20} color="#FFFFFF" />
-          <Text style={styles.trackButtonText}>Track Order</Text>
-        </TouchableOpacity>
+        {/* Order Details Card */}
+        <View style={styles.detailsCard}>
+          <View style={styles.orderIdContainer}>
+            <Text style={styles.orderIdLabel}>Order ID</Text>
+            <Text style={styles.orderId}>#{orderId}</Text>
+          </View>
 
-        <TouchableOpacity 
-          style={styles.homeButton}
-          onPress={() => navigation.navigate('Home')}
-        >
-          <Icon name="home" size={20} color="#2D7A4F" />
-          <Text style={styles.homeButtonText}>Back to Home</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          <View style={styles.divider} />
+
+          <View style={styles.detailRow}>
+            <View style={styles.detailIcon}>
+              <Icon name="fast-food-outline" size={20} color="#2D7A4F" />
+            </View>
+            <View style={styles.detailInfo}>
+              <Text style={styles.detailLabel}>Item</Text>
+              <Text style={styles.detailValue}>
+                {orderData?.item?.name || 'Your meal'} x {orderData?.quantity || 1}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.detailRow}>
+            <View style={styles.detailIcon}>
+              <Icon name="calendar-outline" size={20} color="#2D7A4F" />
+            </View>
+            <View style={styles.detailInfo}>
+              <Text style={styles.detailLabel}>Delivery Date</Text>
+              <Text style={styles.detailValue}>{orderData?.day || 'Today'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.detailRow}>
+            <View style={styles.detailIcon}>
+              <Icon name="time-outline" size={20} color="#2D7A4F" />
+            </View>
+            <View style={styles.detailInfo}>
+              <Text style={styles.detailLabel}>Delivery Time</Text>
+              <Text style={styles.detailValue}>{orderData?.selectedTime || '12:00 PM'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.detailRow}>
+            <View style={styles.detailIcon}>
+              <Icon name="location-outline" size={20} color="#2D7A4F" />
+            </View>
+            <View style={styles.detailInfo}>
+              <Text style={styles.detailLabel}>Delivery Address</Text>
+              <Text style={styles.detailValue} numberOfLines={2}>
+                {orderData?.deliveryAddress || 'Your address'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.amountRow}>
+            <Text style={styles.amountLabel}>Total Amount Paid</Text>
+            <Text style={styles.amountValue}>₹{orderData?.totalAmount || 0}</Text>
+          </View>
+        </View>
+
+        {/* Info Banner */}
+        <View style={styles.infoBanner}>
+          <Icon name="information-circle" size={20} color="#2D7A4F" />
+          <Text style={styles.infoText}>
+            You'll receive a notification when your order is ready for delivery
+          </Text>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.trackButton}
+            onPress={() => navigation.navigate('Orders', {
+              screen: 'OrderStatus',
+              params: { orderId }
+            })}
+          >
+            <Icon name="navigate" size={20} color="#FFFFFF" />
+            <Text style={styles.trackButtonText}>Track Order</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.homeButton}
+            onPress={() => navigation.navigate('Home')}
+          >
+            <Icon name="home" size={20} color="#2D7A4F" />
+            <Text style={styles.homeButtonText}>Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -140,6 +147,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+  scrollContent: {
+    flexGrow: 1,
     padding: 20,
     justifyContent: 'center',
   },
@@ -274,6 +284,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     gap: 12,
+    marginBottom: 20,
   },
   trackButton: {
     flexDirection: 'row',

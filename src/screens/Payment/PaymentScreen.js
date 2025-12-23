@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../../context/AuthContext';
 import { ordersAPI } from '../../services/api';
@@ -96,18 +97,9 @@ const PaymentScreen = ({ route, navigation }) => {
 
       if (response.success) {
         // 3. Success -> Navigate to Confirmation
-        navigation.reset({
-          index: 0,
-          routes: [
-            { name: 'Home' },
-            {
-              name: 'BookingConfirm',
-              params: {
-                orderId: response.data.id,
-                orderData: { ...orderData, orderId: response.data.id, totalAmount: payload.totalAmount }
-              }
-            }
-          ],
+        navigation.replace('BookingConfirm', {
+          orderId: response.data.id,
+          orderData: { ...orderData, orderId: response.data.id, totalAmount: payload.totalAmount }
         });
       } else {
         throw new Error(response.message || 'Failed to place order');
@@ -122,7 +114,7 @@ const PaymentScreen = ({ route, navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Green Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -262,7 +254,7 @@ const PaymentScreen = ({ route, navigation }) => {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 

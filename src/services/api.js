@@ -6,7 +6,7 @@ const API_CONFIG = {
   // DEVELOPMENT_URL: 'http://192.168.1.100:3000/api', // Replace with YOUR IP
 
   // For Production (Play Store)
-  PRODUCTION_URL: 'https://aa7b2b4c7071.ngrok-free.app/api', // Replace with your production URL when ready
+  PRODUCTION_URL: 'https://testing-backend-akshaya.vercel.app/api',
 
   // Change this to switch between dev and prod
   USE_PRODUCTION: true, // Set to true when building for Play Store

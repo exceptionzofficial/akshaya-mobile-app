@@ -464,7 +464,7 @@ const HomeScreen = ({ navigation }) => {
                 <View style={[styles.mealIconContainer, { backgroundColor: '#E8F5E9' }]}>
                   <Icon name="fast-food-outline" size={22} color="#2D7A4F" />
                 </View>
-                <Text style={styles.mealSectionTitle}>A La Carte</Text>
+                <Text style={styles.mealSectionTitle}>Single Meals</Text>
                 <Text style={styles.mealCount}>{filteredSingles.length}</Text>
               </View>
               <View style={styles.singlesGrid}>
