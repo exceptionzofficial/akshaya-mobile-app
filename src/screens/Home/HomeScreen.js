@@ -11,15 +11,20 @@ import {
   TextInput,
   Modal,
   Dimensions,
+  ToastAndroid,
+  Platform,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../../context/AuthContext';
+import { OrderContext } from '../../context/OrderContext';
 import { packagesAPI, singlesAPI } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);
+  const { addToCart } = useContext(OrderContext);
   const [packageMeals, setPackageMeals] = useState([]);
   const [singleMeals, setSingleMeals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,15 +44,34 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const filterOptions = [
-    { id: 'breakfast', label: 'Breakfast', icon: 'sunny-outline', color: '#FFB800' },
-    { id: 'lunch', label: 'Lunch', icon: 'restaurant-outline', color: '#FF6347' },
-    { id: 'dinner', label: 'Dinner', icon: 'moon-outline', color: '#9B59B6' },
-    { id: 'salad', label: 'Salads', icon: 'leaf-outline', color: '#27AE60' },
-    { id: 'soup', label: 'Soups', icon: 'water-outline', color: '#3498DB' },
-    { id: 'rice', label: 'Rice', icon: 'grid-outline', color: '#E67E22' },
-    { id: 'curry', label: 'Curry', icon: 'flame-outline', color: '#E74C3C' },
-    { id: 'dessert', label: 'Desserts', icon: 'ice-cream-outline', color: '#9B59B6' },
+    // Meal Types
+    { id: 'breakfast', label: 'Breakfast', icon: 'sunny-outline', color: '#FFB800', type: 'meal' },
+    { id: 'lunch', label: 'Lunch', icon: 'restaurant-outline', color: '#FF6347', type: 'meal' },
+    { id: 'dinner', label: 'Dinner', icon: 'moon-outline', color: '#9B59B6', type: 'meal' },
+    // All Categories from Admin Panel
+    { id: 'Soups', label: 'Soups', icon: 'water-outline', color: '#3498DB', type: 'category' },
+    { id: 'Classic Soups', label: 'Classic Soups', icon: 'water-outline', color: '#5DADE2', type: 'category' },
+    { id: 'Traditional & Healthy Soups', label: 'Traditional Soups', icon: 'leaf-outline', color: '#48C9B0', type: 'category' },
+    { id: 'Salads', label: 'Salads', icon: 'leaf-outline', color: '#27AE60', type: 'category' },
+    { id: 'International Salads', label: 'Intl Salads', icon: 'globe-outline', color: '#2ECC71', type: 'category' },
+    { id: 'Shutters Veg', label: 'Shutters Veg', icon: 'nutrition-outline', color: '#58D68D', type: 'category' },
+    { id: 'Starters & Snacks', label: 'Starters', icon: 'fast-food-outline', color: '#E67E22', type: 'category' },
+    { id: 'Chaat', label: 'Chaat', icon: 'pizza-outline', color: '#F39C12', type: 'category' },
+    { id: 'Sandwich', label: 'Sandwich', icon: 'layers-outline', color: '#D35400', type: 'category' },
+    { id: 'Mojito', label: 'Mojito', icon: 'wine-outline', color: '#1ABC9C', type: 'category' },
+    { id: 'Milk Shake', label: 'Milk Shake', icon: 'cafe-outline', color: '#9B59B6', type: 'category' },
+    { id: 'Fresh Juices', label: 'Fresh Juices', icon: 'beer-outline', color: '#E74C3C', type: 'category' },
+    { id: 'Falooda & Desserts', label: 'Desserts', icon: 'ice-cream-outline', color: '#C0392B', type: 'category' },
   ];
+
+  // Show toast message
+  const showToast = (message) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('', message);
+    }
+  };
 
   useEffect(() => {
     fetchMenuData();
@@ -63,8 +87,8 @@ const HomeScreen = ({ navigation }) => {
         setPackageMeals(packagesRes.data.packages || []);
       }
 
-      // Fetch single meals
-      const singlesRes = await singlesAPI.getAll();
+      // Fetch single meals (includeHidden=true to show out-of-stock items)
+      const singlesRes = await singlesAPI.getAll(true);
       if (singlesRes.success) {
         setSingleMeals(singlesRes.data.items || []);
       }
@@ -127,13 +151,19 @@ const HomeScreen = ({ navigation }) => {
     let items = singleMeals;
 
     if (selectedFilters.length > 0) {
-      items = items.filter(item => {
-        const itemName = item.name.toLowerCase();
-        const category = (item.category || '').toLowerCase();
-        return selectedFilters.some(filter =>
-          itemName.includes(filter) || category.includes(filter)
-        );
+      // Get category filters (not meal type filters)
+      const categoryFilters = selectedFilters.filter(f => {
+        const opt = filterOptions.find(o => o.id === f);
+        return opt && opt.type === 'category';
       });
+
+      if (categoryFilters.length > 0) {
+        items = items.filter(item => {
+          const category = item.category || '';
+          // Exact category match
+          return categoryFilters.includes(category);
+        });
+      }
     }
 
     if (searchQuery.trim()) {
@@ -258,29 +288,52 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const renderSingleCard = (item) => {
+    // Check if item is out of stock (hidden in admin)
+    const isOutOfStock = item.isVisible === false;
+
+    const handleAddToCart = () => {
+      if (isOutOfStock) return;
+      addToCart({
+        ...item,
+        type: 'single',
+        quantity: 1
+      });
+      showToast(`${item.name} added to cart!`);
+    };
+
     return (
       <TouchableOpacity
         key={item.id}
-        style={styles.singleCard}
-        onPress={() => navigation.navigate('Booking', { item, type: 'single' })}
-        activeOpacity={0.7}
+        style={[styles.singleCard, isOutOfStock && styles.singleCardDisabled]}
+        onPress={() => !isOutOfStock && navigation.navigate('Booking', { item, type: 'single' })}
+        activeOpacity={isOutOfStock ? 1 : 0.7}
+        disabled={isOutOfStock}
       >
         <Image
           source={{ uri: item.image || 'https://via.placeholder.com/200' }}
-          style={styles.singleImage}
+          style={[styles.singleImage, isOutOfStock && { opacity: 0.5 }]}
         />
+        {isOutOfStock && (
+          <View style={styles.outOfStockOverlay}>
+            <Text style={styles.outOfStockText}>Out of Stock</Text>
+          </View>
+        )}
         <View style={styles.singleContent}>
           {item.category && (
-            <View style={styles.categoryBadge}>
+            <View style={[styles.categoryBadge, isOutOfStock && { opacity: 0.5 }]}>
               <Text style={styles.categoryText}>{item.category}</Text>
             </View>
           )}
-          <Text style={styles.singleName} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.singleDesc} numberOfLines={2}>{item.description}</Text>
+          <Text style={[styles.singleName, isOutOfStock && { color: '#95A5A6' }]} numberOfLines={1}>{item.name}</Text>
+          <Text style={[styles.singleDesc, isOutOfStock && { color: '#BDC3C7' }]} numberOfLines={2}>{item.description}</Text>
           <View style={styles.singleFooter}>
-            <Text style={styles.singlePrice}>₹{item.price}</Text>
-            <TouchableOpacity style={styles.addButton}>
-              <Icon name="add" size={18} color="#FFFFFF" />
+            <Text style={[styles.singlePrice, isOutOfStock && styles.singlePriceDisabled]}>₹{item.price}</Text>
+            <TouchableOpacity
+              style={[styles.addButton, isOutOfStock && styles.addButtonDisabled]}
+              onPress={handleAddToCart}
+              disabled={isOutOfStock}
+            >
+              <Icon name={isOutOfStock ? "close" : "cart"} size={16} color={isOutOfStock ? "#95A5A6" : "#FFFFFF"} />
             </TouchableOpacity>
           </View>
         </View>
@@ -557,7 +610,7 @@ const HomeScreen = ({ navigation }) => {
                 })}
               </View>
 
-              <Text style={styles.filterSectionTitle}>Food Type</Text>
+              <Text style={styles.filterSectionTitle}>Category</Text>
               <View style={styles.filterGrid}>
                 {filterOptions.slice(3).map(option => {
                   const isSelected = selectedFilters.includes(option.id);
@@ -1003,6 +1056,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#2D7A4F',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Out of Stock Styles
+  singleCardDisabled: {
+    opacity: 0.7,
+  },
+  outOfStockOverlay: {
+    position: 'absolute',
+    top: 40,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingVertical: 6,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  outOfStockText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  singlePriceDisabled: {
+    color: '#95A5A6',
+    textDecorationLine: 'line-through',
+  },
+  addButtonDisabled: {
+    backgroundColor: '#E0E0E0',
   },
   emptyState: {
     alignItems: 'center',

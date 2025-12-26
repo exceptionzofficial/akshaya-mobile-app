@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,50 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  ToastAndroid,
+  Platform,
+  Alert
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { packagesAPI, singlesAPI } from '../../services/api';
+import { OrderContext } from '../../context/OrderContext';
 
 const DailyMenuScreen = ({ navigation }) => {
+  const { addToCart } = useContext(OrderContext);
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [weeklyPackages, setWeeklyPackages] = useState({});
   const [singleMeals, setSingleMeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  // Categories matching admin panel
+  const categories = [
+    'All',
+    'Soups',
+    'Classic Soups',
+    'Traditional & Healthy Soups',
+    'Salads',
+    'International Salads',
+    'Shutters Veg',
+    'Starters & Snacks',
+    'Chaat',
+    'Sandwich',
+    'Mojito',
+    'Milk Shake',
+    'Fresh Juices',
+    'Falooda & Desserts',
+  ];
+
+  // Show toast message
+  const showToast = (message) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('', message);
+    }
+  };
 
   const weekDays = [
     { id: 1, name: 'Monday', short: 'Mon' },
@@ -55,8 +88,8 @@ const DailyMenuScreen = ({ navigation }) => {
         setWeeklyPackages(grouped);
       }
 
-      // Fetch Single Meals
-      const singlesRes = await singlesAPI.getAll();
+      // Fetch Single Meals (including hidden items for out-of-stock display)
+      const singlesRes = await singlesAPI.getAll(true);
       if (singlesRes.success) {
         setSingleMeals(singlesRes.data.items || []);
       }
@@ -169,30 +202,57 @@ const DailyMenuScreen = ({ navigation }) => {
   };
 
   const renderSingleCard = (item) => {
+    const isOutOfStock = item.isVisible === false;
+
+    const handleAddToCart = () => {
+      if (isOutOfStock) return;
+
+      addToCart({
+        ...item,
+        type: 'single',
+        quantity: 1
+      });
+      showToast(`${item.name} added to cart!`);
+    };
+
     return (
       <TouchableOpacity
         key={item.id}
-        style={styles.singleCard}
-        onPress={() => navigation.navigate('Booking', { item, type: 'single' })}
-        activeOpacity={0.7}
+        style={[styles.singleCard, isOutOfStock && styles.outOfStockCard]}
+        onPress={() => !isOutOfStock && navigation.navigate('Booking', { item, type: 'single' })}
+        activeOpacity={isOutOfStock ? 1 : 0.7}
       >
-        <Image
-          source={{ uri: item.image || 'https://via.placeholder.com/200' }}
-          style={styles.singleImage}
-        />
+        <View style={styles.singleImageContainer}>
+          <Image
+            source={{ uri: item.image || 'https://via.placeholder.com/200' }}
+            style={[styles.singleImage, isOutOfStock && styles.outOfStockImage]}
+          />
+          {isOutOfStock && (
+            <View style={styles.outOfStockOverlay}>
+              <Icon name="ban-outline" size={24} color="#FFFFFF" />
+              <Text style={styles.outOfStockText}>Out of Stock</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.singleContent}>
           {item.category && (
-            <View style={styles.categoryBadge}>
+            <View style={[styles.categoryBadge, isOutOfStock && styles.outOfStockBadge]}>
               <Text style={styles.categoryText}>{item.category}</Text>
             </View>
           )}
-          <Text style={styles.singleName} numberOfLines={1}>{item.name}</Text>
+          <Text style={[styles.singleName, isOutOfStock && styles.outOfStockName]} numberOfLines={1}>{item.name}</Text>
           <Text style={styles.singleDesc} numberOfLines={2}>{item.description}</Text>
           <View style={styles.singleFooter}>
-            <Text style={styles.singlePrice}>₹{item.price}</Text>
-            <TouchableOpacity style={styles.addButton}>
-              <Icon name="add" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
+            <Text style={[styles.singlePrice, isOutOfStock && styles.outOfStockPrice]}>₹{item.price}</Text>
+            {!isOutOfStock ? (
+              <TouchableOpacity style={styles.addButton} onPress={handleAddToCart}>
+                <Icon name="cart" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.addButton, styles.addButtonDisabled]}>
+                <Icon name="close" size={16} color="#FFFFFF" />
+              </View>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -372,14 +432,43 @@ const DailyMenuScreen = ({ navigation }) => {
                   <Icon name="fast-food-outline" size={22} color="#2D7A4F" />
                 </View>
                 <View style={styles.mealTitleContainer}>
-                  <Text style={styles.mealTitle}>A La Carte</Text>
+                  <Text style={styles.mealTitle}>Single Meals</Text>
                   <Text style={styles.mealCount}>
                     {singleMeals.length} items
                   </Text>
                 </View>
               </View>
+
+              {/* Category Filter */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryFilterContainer}
+              >
+                {categories.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.categoryFilterBtn,
+                      selectedCategory === cat && styles.categoryFilterBtnActive
+                    ]}
+                    onPress={() => setSelectedCategory(cat)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.categoryFilterText,
+                      selectedCategory === cat && styles.categoryFilterTextActive
+                    ]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
               <View style={styles.singlesGrid}>
-                {singleMeals.map(item => renderSingleCard(item))}
+                {singleMeals
+                  .filter(item => selectedCategory === 'All' || item.category === selectedCategory)
+                  .map(item => renderSingleCard(item))}
               </View>
             </View>
           )}
@@ -836,6 +925,75 @@ const styles = StyleSheet.create({
     color: '#95A5A6',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  // Category Filter Styles
+  categoryFilterContainer: {
+    paddingHorizontal: 4,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  categoryFilterBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F5F7FA',
+    borderWidth: 1,
+    borderColor: '#E8ECEF',
+    marginRight: 8,
+  },
+  categoryFilterBtnActive: {
+    backgroundColor: '#2D7A4F',
+    borderColor: '#2D7A4F',
+  },
+  categoryFilterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7F8C8D',
+  },
+  categoryFilterTextActive: {
+    color: '#FFFFFF',
+  },
+  // Single Card Image Container
+  singleImageContainer: {
+    position: 'relative',
+  },
+  // Out of Stock Styles
+  outOfStockCard: {
+    opacity: 0.8,
+  },
+  outOfStockImage: {
+    opacity: 0.5,
+  },
+  outOfStockOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  outOfStockText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  outOfStockBadge: {
+    backgroundColor: '#FFEBEE',
+  },
+  outOfStockName: {
+    color: '#95A5A6',
+  },
+  outOfStockPrice: {
+    color: '#95A5A6',
+    textDecorationLine: 'line-through',
+  },
+  addButtonDisabled: {
+    backgroundColor: '#CED4DA',
   },
 });
 

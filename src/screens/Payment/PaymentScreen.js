@@ -11,13 +11,36 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../../context/AuthContext';
+import { OrderContext } from '../../context/OrderContext';
 import { ordersAPI } from '../../services/api';
 
 const PaymentScreen = ({ route, navigation }) => {
   const { orderData } = route.params;
   const { user } = useContext(AuthContext);
+  const { clearCart } = useContext(OrderContext);
   const [selectedMethod, setSelectedMethod] = useState('upi');
   const [loading, setLoading] = useState(false);
+
+  // Detect if coming from cart (has items array) or from booking (has item object)
+  const isFromCart = orderData.fromCart === true;
+
+  // Get display data based on source
+  const getDisplayInfo = () => {
+    if (isFromCart) {
+      const itemCount = orderData.items.reduce((sum, item) => sum + item.quantity, 0);
+      return {
+        itemSummary: `${itemCount} item${itemCount > 1 ? 's' : ''} from cart`,
+        totalItems: orderData.items
+      };
+    } else {
+      return {
+        itemSummary: `${orderData.item.name} x ${orderData.quantity}`,
+        totalItems: [{ ...orderData.item, quantity: orderData.quantity }]
+      };
+    }
+  };
+
+  const displayInfo = getDisplayInfo();
 
   const paymentMethods = [
     {
@@ -59,44 +82,63 @@ const PaymentScreen = ({ route, navigation }) => {
     setLoading(true);
 
     try {
-      // 1. Construct payload fitting backend schema
-      // Backend expects: items (array), customer (obj), totalAmount, paymentMethod, etc.
-      const payload = {
-        items: [
+      // Build items array based on source
+      let items;
+      if (isFromCart) {
+        items = orderData.items.map(item => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          image: item.image,
+          packageItems: item.items || [],
+          day: item.day || null,
+          mealType: item.mealType || null,
+          category: item.category || null,
+          type: item.type
+        }));
+      } else {
+        items = [
           {
             id: orderData.item.id,
             name: orderData.item.name,
             quantity: orderData.quantity,
             price: orderData.item.price,
             image: orderData.item.image,
-            // Include package items shorthand if it's a package
             packageItems: orderData.item.items || [],
             day: orderData.day,
             mealType: orderData.item.mealType
           }
-        ],
+        ];
+      }
+
+      const payload = {
+        items,
         customer: {
           name: user.name,
           phone: user.phone,
           email: user.email || '',
-          address: orderData.deliveryAddress
+          address: orderData.deliveryAddress || 'To be confirmed'
         },
         totalAmount: orderData.totalAmount,
         paymentMethod: paymentMethods.find(m => m.id === selectedMethod)?.name || 'Cash',
         notes: orderData.specialInstructions || '',
         deliveryInfo: {
-          date: orderData.displayDate,
-          time: orderData.displayTime,
-          isToday: orderData.isToday
+          date: orderData.displayDate || new Date().toLocaleDateString(),
+          time: orderData.displayTime || 'ASAP',
+          isToday: orderData.isToday !== undefined ? orderData.isToday : true
         }
       };
 
-      // 2. Call Create Order API
       console.log('📦 Creating Order:', JSON.stringify(payload, null, 2));
       const response = await ordersAPI.create(payload);
 
       if (response.success) {
-        // 3. Success -> Navigate to Confirmation
+        // Clear cart if came from cart
+        if (isFromCart) {
+          clearCart();
+        }
+
         navigation.replace('BookingConfirm', {
           orderId: response.data.id,
           orderData: { ...orderData, orderId: response.data.id, totalAmount: payload.totalAmount }
@@ -138,28 +180,32 @@ const PaymentScreen = ({ route, navigation }) => {
           <View style={styles.summaryRow}>
             <Icon name="fast-food-outline" size={20} color="#2D7A4F" />
             <View style={styles.summaryInfo}>
-              <Text style={styles.summaryLabel}>Item</Text>
-              <Text style={styles.summaryValue}>{orderData.item.name} x {orderData.quantity}</Text>
+              <Text style={styles.summaryLabel}>Item{displayInfo.totalItems.length > 1 ? 's' : ''}</Text>
+              <Text style={styles.summaryValue}>{displayInfo.itemSummary}</Text>
             </View>
           </View>
 
-          <View style={styles.summaryRow}>
-            <Icon name="calendar-outline" size={20} color="#2D7A4F" />
-            <View style={styles.summaryInfo}>
-              <Text style={styles.summaryLabel}>Delivery</Text>
-              <Text style={styles.summaryValue}>
-                {orderData.displayDate} {orderData.isToday ? `• ${orderData.displayTime}` : `(${orderData.day})`}
-              </Text>
+          {!isFromCart && orderData.displayDate && (
+            <View style={styles.summaryRow}>
+              <Icon name="calendar-outline" size={20} color="#2D7A4F" />
+              <View style={styles.summaryInfo}>
+                <Text style={styles.summaryLabel}>Delivery</Text>
+                <Text style={styles.summaryValue}>
+                  {orderData.displayDate} {orderData.isToday ? `• ${orderData.displayTime}` : `(${orderData.day})`}
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
 
-          <View style={styles.summaryRow}>
-            <Icon name="location-outline" size={20} color="#2D7A4F" />
-            <View style={styles.summaryInfo}>
-              <Text style={styles.summaryLabel}>Address</Text>
-              <Text style={styles.summaryValue} numberOfLines={2}>{orderData.deliveryAddress}</Text>
+          {orderData.deliveryAddress && (
+            <View style={styles.summaryRow}>
+              <Icon name="location-outline" size={20} color="#2D7A4F" />
+              <View style={styles.summaryInfo}>
+                <Text style={styles.summaryLabel}>Address</Text>
+                <Text style={styles.summaryValue} numberOfLines={2}>{orderData.deliveryAddress}</Text>
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.divider} />
 

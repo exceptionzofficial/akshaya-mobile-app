@@ -77,8 +77,18 @@ const MyOrdersScreen = ({ navigation }) => {
 
   const renderOrderItem = ({ item }) => {
     const statusInfo = getStatusInfo(item.status);
-    // Safe access to first item
-    const firstItem = item.items && item.items[0] ? item.items[0] : { name: 'Order Item', quantity: 1 };
+    // Get all items for display
+    const orderItems = item.items || [];
+    const firstItem = orderItems[0] || { name: 'Order Item', quantity: 1 };
+    const totalItemCount = orderItems.reduce((sum, i) => sum + (i.quantity || 1), 0);
+
+    // Create items summary string
+    const getItemsSummary = () => {
+      if (orderItems.length === 0) return 'Order Item';
+      if (orderItems.length === 1) return firstItem.name;
+      // Multiple items - show first item + count
+      return `${firstItem.name} +${orderItems.length - 1} more`;
+    };
 
     return (
       <TouchableOpacity
@@ -93,7 +103,7 @@ const MyOrdersScreen = ({ navigation }) => {
 
         <View style={styles.orderInfo}>
           <View style={styles.orderHeader}>
-            <Text style={styles.orderId}>#{item.id}</Text>
+            <Text style={styles.orderId}>#{item.id?.slice(-8) || item.id}</Text>
             <View style={[styles.statusBadge, { backgroundColor: `${statusInfo.color}15` }]}>
               <Icon name={statusInfo.icon} size={14} color={statusInfo.color} />
               <Text style={[styles.statusText, { color: statusInfo.color }]}>
@@ -102,20 +112,24 @@ const MyOrdersScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <Text style={styles.itemName} numberOfLines={1}>{firstItem.name}</Text>
-          <Text style={styles.itemQuantity}>Quantity: {firstItem.quantity}</Text>
+          <Text style={styles.itemName} numberOfLines={1}>{getItemsSummary()}</Text>
+          <Text style={styles.itemQuantity}>
+            {orderItems.length > 1
+              ? `${orderItems.length} items • Total qty: ${totalItemCount}`
+              : `Quantity: ${firstItem.quantity || 1}`}
+          </Text>
 
           <View style={styles.orderDetails}>
             <View style={styles.detailItem}>
               <Icon name="calendar-outline" size={14} color="#95A5A6" />
               <Text style={styles.detailText}>
-                {item.deliveryInfo ? item.deliveryInfo.date : 'Date'}
+                {item.deliveryInfo?.date || new Date(item.createdAt).toLocaleDateString()}
               </Text>
             </View>
             <View style={styles.detailItem}>
               <Icon name="time-outline" size={14} color="#95A5A6" />
               <Text style={styles.detailText}>
-                {item.deliveryInfo ? item.deliveryInfo.time : 'Time'}
+                {item.deliveryInfo?.time || 'ASAP'}
               </Text>
             </View>
           </View>

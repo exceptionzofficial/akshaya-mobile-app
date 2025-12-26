@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,31 @@ import {
   ScrollView,
   Image,
   Alert,
-  Modal
+  Modal,
+  ToastAndroid,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { OrderContext } from '../../context/OrderContext';
 
 const BookingScreen = ({ route, navigation }) => {
+  const { addToCart } = useContext(OrderContext);
   const { item, day, type = 'package' } = route.params;
   const [quantity, setQuantity] = useState(1);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [showItemsModal, setShowItemsModal] = useState(false);
+
+  // Show toast message
+  const showToast = (message) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('', message);
+    }
+  };
 
   // Helper functions for item data
   const getItemName = (itemData) =>
@@ -96,6 +109,19 @@ const BookingScreen = ({ route, navigation }) => {
         setIsFetchingLocation(false);
       }, 1000);
     }
+  };
+
+  const handleAddToCart = () => {
+    const cartItem = {
+      ...item,
+      type,
+      day: day || null,
+      quantity,
+    };
+
+    addToCart(cartItem);
+    showToast(`${item.name} (x${quantity}) added to cart!`);
+    navigation.goBack();
   };
 
   const handleProceedToPayment = () => {
@@ -327,13 +353,22 @@ const BookingScreen = ({ route, navigation }) => {
           <Text style={styles.bottomLabel}>Total</Text>
           <Text style={styles.bottomPrice}>₹{totalAmount}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.proceedButton}
-          onPress={handleProceedToPayment}
-        >
-          <Text style={styles.proceedButtonText}>Proceed to Pay</Text>
-          <Icon name="arrow-forward" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.bottomButtons}>
+          <TouchableOpacity
+            style={styles.addToCartButton}
+            onPress={handleAddToCart}
+          >
+            <Icon name="cart-outline" size={18} color="#2D7A4F" />
+            <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.proceedButton}
+            onPress={handleProceedToPayment}
+          >
+            <Text style={styles.proceedButtonText}>Pay Now</Text>
+            <Icon name="arrow-forward" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Package Items Modal */}
@@ -713,15 +748,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#2D7A4F',
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 6,
   },
   proceedButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  bottomButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  addToCartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#2D7A4F',
+    gap: 6,
+  },
+  addToCartButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2D7A4F',
   },
   // Modal Styles
   modalOverlay: {

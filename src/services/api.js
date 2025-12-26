@@ -2,11 +2,12 @@
 // API Configuration - Update this URL
 // ==========================================
 const API_CONFIG = {
-  // For Development (Local testing)
-  // DEVELOPMENT_URL: 'http://192.168.1.100:3000/api', // Replace with YOUR IP
 
   // For Production (Play Store)
   PRODUCTION_URL: 'https://testing-backend-akshaya.vercel.app/api',
+
+  // PRODUCTION_URL: 'https://eb263aa66d59.ngrok-free.app/api',
+
 
   // Change this to switch between dev and prod
   USE_PRODUCTION: true, // Set to true when building for Play Store
@@ -262,8 +263,8 @@ export const packagesAPI = {
 // Single Meals API (NEW)
 // ==========================================
 export const singlesAPI = {
-  // Get all single items (visible only for customers)
-  getAll: () => apiService.get('/singles'),
+  // Get all single items (includeHidden=true to get all items for customer app)
+  getAll: (includeHidden = false) => apiService.get(`/singles${includeHidden ? '?includeHidden=true' : ''}`),
 
   // Get by category
   getByCategory: (category) => apiService.get(`/singles/category/${encodeURIComponent(category)}`),

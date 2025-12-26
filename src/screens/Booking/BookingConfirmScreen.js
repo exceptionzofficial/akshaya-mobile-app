@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,28 @@ import {
   ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CommonActions } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { OrderContext } from '../../context/OrderContext';
 
 const BookingConfirmScreen = ({ route, navigation }) => {
   const { orderId, orderData } = route.params;
+  const { clearCart } = useContext(OrderContext);
   const scaleAnim = new Animated.Value(0);
+
+  // Detect if from cart
+  const isFromCart = orderData?.fromCart === true;
+
+  // Get display info based on source
+  const getItemDisplay = () => {
+    if (isFromCart && orderData.items) {
+      const itemCount = orderData.items.reduce((sum, item) => sum + item.quantity, 0);
+      return `${itemCount} item${itemCount > 1 ? 's' : ''} from cart`;
+    } else if (orderData?.item) {
+      return `${orderData.item.name} x ${orderData.quantity || 1}`;
+    }
+    return 'Your meal';
+  };
 
   useEffect(() => {
     Animated.spring(scaleAnim, {
@@ -21,7 +38,43 @@ const BookingConfirmScreen = ({ route, navigation }) => {
       friction: 3,
       useNativeDriver: true,
     }).start();
+
+    // Clear cart if came from cart
+    if (isFromCart) {
+      clearCart();
+    }
   }, []);
+
+  const handleBackToHome = () => {
+    // Reset navigation and go to Home tab
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      })
+    );
+  };
+
+  const handleTrackOrder = () => {
+    // Navigate to Orders tab with OrderStatus screen
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'Orders',
+            state: {
+              routes: [
+                { name: 'MyOrders' },
+                { name: 'OrderStatus', params: { orderId } }
+              ],
+              index: 1
+            }
+          }
+        ],
+      })
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -36,10 +89,11 @@ const BookingConfirmScreen = ({ route, navigation }) => {
             { transform: [{ scale: scaleAnim }] }
           ]}
         >
-          <View style={styles.successCircle}>
-            <Icon name="checkmark" size={80} color="#FFFFFF" />
+          <View style={styles.successRing}>
+            <View style={styles.successCircle}>
+              <Icon name="checkmark" size={60} color="#FFFFFF" />
+            </View>
           </View>
-          <View style={styles.successRing} />
         </Animated.View>
 
         {/* Success Message */}
@@ -62,10 +116,8 @@ const BookingConfirmScreen = ({ route, navigation }) => {
               <Icon name="fast-food-outline" size={20} color="#2D7A4F" />
             </View>
             <View style={styles.detailInfo}>
-              <Text style={styles.detailLabel}>Item</Text>
-              <Text style={styles.detailValue}>
-                {orderData?.item?.name || 'Your meal'} x {orderData?.quantity || 1}
-              </Text>
+              <Text style={styles.detailLabel}>Item{isFromCart ? 's' : ''}</Text>
+              <Text style={styles.detailValue}>{getItemDisplay()}</Text>
             </View>
           </View>
 
@@ -75,7 +127,7 @@ const BookingConfirmScreen = ({ route, navigation }) => {
             </View>
             <View style={styles.detailInfo}>
               <Text style={styles.detailLabel}>Delivery Date</Text>
-              <Text style={styles.detailValue}>{orderData?.day || 'Today'}</Text>
+              <Text style={styles.detailValue}>{orderData?.displayDate || orderData?.day || 'Today'}</Text>
             </View>
           </View>
 
@@ -85,21 +137,23 @@ const BookingConfirmScreen = ({ route, navigation }) => {
             </View>
             <View style={styles.detailInfo}>
               <Text style={styles.detailLabel}>Delivery Time</Text>
-              <Text style={styles.detailValue}>{orderData?.selectedTime || '12:00 PM'}</Text>
+              <Text style={styles.detailValue}>{orderData?.displayTime || orderData?.selectedTime || 'ASAP'}</Text>
             </View>
           </View>
 
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Icon name="location-outline" size={20} color="#2D7A4F" />
+          {orderData?.deliveryAddress && (
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Icon name="location-outline" size={20} color="#2D7A4F" />
+              </View>
+              <View style={styles.detailInfo}>
+                <Text style={styles.detailLabel}>Delivery Address</Text>
+                <Text style={styles.detailValue} numberOfLines={2}>
+                  {orderData.deliveryAddress}
+                </Text>
+              </View>
             </View>
-            <View style={styles.detailInfo}>
-              <Text style={styles.detailLabel}>Delivery Address</Text>
-              <Text style={styles.detailValue} numberOfLines={2}>
-                {orderData?.deliveryAddress || 'Your address'}
-              </Text>
-            </View>
-          </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -121,10 +175,7 @@ const BookingConfirmScreen = ({ route, navigation }) => {
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={styles.trackButton}
-            onPress={() => navigation.navigate('Orders', {
-              screen: 'OrderStatus',
-              params: { orderId }
-            })}
+            onPress={handleTrackOrder}
           >
             <Icon name="navigate" size={20} color="#FFFFFF" />
             <Text style={styles.trackButtonText}>Track Order</Text>
@@ -132,7 +183,7 @@ const BookingConfirmScreen = ({ route, navigation }) => {
 
           <TouchableOpacity
             style={styles.homeButton}
-            onPress={() => navigation.navigate('Home')}
+            onPress={handleBackToHome}
           >
             <Icon name="home" size={20} color="#2D7A4F" />
             <Text style={styles.homeButtonText}>Back to Home</Text>
@@ -156,12 +207,20 @@ const styles = StyleSheet.create({
   successContainer: {
     alignItems: 'center',
     marginBottom: 30,
-    position: 'relative',
+  },
+  successRing: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 3,
+    borderColor: 'rgba(45, 122, 79, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   successCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#2D7A4F',
     justifyContent: 'center',
     alignItems: 'center',
@@ -170,15 +229,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 12,
-  },
-  successRing: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 3,
-    borderColor: '#2D7A4F',
-    opacity: 0.2,
   },
   title: {
     fontSize: 26,
